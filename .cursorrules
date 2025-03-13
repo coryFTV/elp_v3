@@ -1,0 +1,26 @@
+# Memory Management
+- Start with "Remembering..." and read what you stored in memory before working on a task
+- Reference knowledge as "memory"
+- When the assigned task is done:
+  1. Create/update entities
+  2. Define relationships
+  3. Store observations
+
+# Entity Types
+1. `Component` - UI components, reusable modules, etc.
+2. `Architecture` - Design patterns, system structures, data flow
+3. `Feature` - Project features and functionality
+4. `Bug` - Issues encountered and their solutions
+5. `Performance` - Performance considerations and optimizations
+6. `APIUsage` - Framework implementations, third-party integrations
+7. `ProjectStructure` - File organization, module dependencies
+
+# Relation Types
+1. `implements` - Shows how components implement specific patterns
+2. `depends_on` - Captures dependencies between components
+3. `optimizes` - Links performance improvements to components
+4. `causes` - Connects issues to their source
+5. `resolves` - Links solutions to specific problems
+6. `relates_to` - Generic relationship for connected concepts
+7. `improves` - Shows how new patterns enhance existing components
+8. `conflicts_with` - Identifies incompatibilities or conflicts 
