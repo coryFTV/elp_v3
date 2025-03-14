@@ -19,6 +19,12 @@ export default function FuboMediaExample({
   const [activeTab, setActiveTab] = useState<'movies' | 'series'>('movies');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [timeString, setTimeString] = useState<string>('');
+  
+  // Update the time string client-side only to avoid hydration mismatch
+  useEffect(() => {
+    setTimeString(lastRefresh.toLocaleTimeString());
+  }, [lastRefresh]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -172,7 +178,8 @@ export default function FuboMediaExample({
       <div className="mb-4 text-sm text-gray-600">
         <p><strong>Data Source:</strong> {useMockData ? 'Mock Data' : 'Real API'}</p>
         <p><strong>CORS Proxy:</strong> {useCorsProxy ? 'Enabled' : 'Disabled'}</p>
-        <p><strong>Last Refreshed:</strong> {lastRefresh.toLocaleTimeString()}</p>
+        <p><strong>Next.js Proxy:</strong> {useNextjsProxy ? 'Enabled' : 'Disabled'}</p>
+        <p><strong>Last Refreshed:</strong> {timeString}</p>
       </div>
       
       {loading && <p className="text-gray-500">Loading data...</p>}
