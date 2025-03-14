@@ -34,7 +34,7 @@ export default function FuboDataExample({
         // Fetch data from Fubo service
         const result = await fetchFuboData(
           ['matches', 'movies', 'series'], 
-          { useMockData, useCorsProxy }
+          { useMockData, useCorsProxy, useNextjsProxy }
         );
         
         setData(result);
