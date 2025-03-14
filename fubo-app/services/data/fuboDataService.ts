@@ -116,8 +116,15 @@ const CONFIG = {
   USE_MOCK_DATA: false,
   // Set to true to use CORS proxy for API requests
   USE_CORS_PROXY: true,
-  // CORS proxy base URL - use a public proxy with no rate limits
-  CORS_PROXY_URL: 'https://api.allorigins.win/raw?url=',
+  // CORS proxy options
+  PROXY_OPTIONS: {
+    // Use our own Next.js API route proxy (preferred option)
+    USE_NEXTJS_PROXY: true,
+    // Use external CORS proxy service (fallback option)
+    USE_EXTERNAL_PROXY: false,
+    // External CORS proxy URL
+    EXTERNAL_PROXY_URL: 'https://api.allorigins.win/raw?url=',
+  },
   // Set to true to use no-cors mode (will result in opaque response)
   USE_NO_CORS_MODE: false,
 };
@@ -133,6 +140,52 @@ if (typeof window !== 'undefined') {
   if (storedCorsProxy !== null) {
     CONFIG.USE_CORS_PROXY = storedCorsProxy === 'true';
   }
+  
+  const storedUseNextjsProxy = window.localStorage.getItem('fubo_use_nextjs_proxy');
+  if (storedUseNextjsProxy !== null) {
+    CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY = storedUseNextjsProxy === 'true';
+  }
+}
+
+/**
+ * Toggle between different proxy methods
+ */
+export function toggleProxyMethod(method: 'nextjs' | 'external' | 'none'): void {
+  if (method === 'nextjs') {
+    CONFIG.USE_CORS_PROXY = true;
+    CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY = true;
+    CONFIG.PROXY_OPTIONS.USE_EXTERNAL_PROXY = false;
+  } else if (method === 'external') {
+    CONFIG.USE_CORS_PROXY = true;
+    CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY = false;
+    CONFIG.PROXY_OPTIONS.USE_EXTERNAL_PROXY = true;
+  } else {
+    CONFIG.USE_CORS_PROXY = false;
+    CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY = false;
+    CONFIG.PROXY_OPTIONS.USE_EXTERNAL_PROXY = false;
+  }
+  
+  // Store the settings in localStorage
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem('fubo_use_cors_proxy', CONFIG.USE_CORS_PROXY.toString());
+    window.localStorage.setItem('fubo_use_nextjs_proxy', CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY.toString());
+  }
+  
+  // Clear cache when changing proxy settings
+  clearCache();
+}
+
+/**
+ * Get current proxy method
+ */
+export function getProxyMethod(): 'nextjs' | 'external' | 'none' {
+  if (!CONFIG.USE_CORS_PROXY) {
+    return 'none';
+  }
+  if (CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY) {
+    return 'nextjs';
+  }
+  return 'external';
 }
 
 /**
@@ -154,27 +207,6 @@ export function toggleMockData(useMock?: boolean): boolean {
   clearCache();
   
   return CONFIG.USE_MOCK_DATA;
-}
-
-/**
- * Toggle CORS proxy usage
- */
-export function toggleCorsProxy(useProxy?: boolean): boolean {
-  if (typeof useProxy === 'boolean') {
-    CONFIG.USE_CORS_PROXY = useProxy;
-  } else {
-    CONFIG.USE_CORS_PROXY = !CONFIG.USE_CORS_PROXY;
-  }
-  
-  // Store the setting in localStorage
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem('fubo_use_cors_proxy', CONFIG.USE_CORS_PROXY.toString());
-  }
-  
-  // Clear cache when changing proxy settings
-  clearCache();
-  
-  return CONFIG.USE_CORS_PROXY;
 }
 
 /**
@@ -421,7 +453,7 @@ function getBaseUrl(): string {
   if (typeof window !== 'undefined' && 
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && 
       CONFIG.USE_CORS_PROXY) {
-    return `${CONFIG.CORS_PROXY_URL}${url}`;
+    return `${CONFIG.PROXY_OPTIONS.EXTERNAL_PROXY_URL}${url}`;
   }
   
   return url;
@@ -580,14 +612,24 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     return mockData;
   }
   
-  // Construct the URL based on CORS proxy settings
+  // Construct the URL based on proxy settings
   let url;
-  if (CONFIG.USE_CORS_PROXY && 
-      typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    // When using CORS proxy, encode the entire URL
-    url = `${CONFIG.CORS_PROXY_URL}${encodeURIComponent(`${CONFIG.BASE_URL}/${endpoint}`)}`;
+  
+  if (CONFIG.USE_CORS_PROXY) {
+    if (CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY && typeof window !== 'undefined') {
+      // Use our Next.js API route proxy (server-side solution)
+      url = `/api/proxy?endpoint=${endpoint}`;
+    } else if (CONFIG.PROXY_OPTIONS.USE_EXTERNAL_PROXY && 
+        typeof window !== 'undefined' && 
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      // Use external CORS proxy (client-side solution)
+      url = `${CONFIG.PROXY_OPTIONS.EXTERNAL_PROXY_URL}${encodeURIComponent(`${CONFIG.BASE_URL}/${endpoint}`)}`;
+    } else {
+      // Direct API call (works from same domain or with proper CORS headers)
+      url = `${CONFIG.BASE_URL}/${endpoint}`;
+    }
   } else {
+    // Direct API call without proxy
     url = `${CONFIG.BASE_URL}/${endpoint}`;
   }
   
@@ -666,19 +708,51 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
 }
 
 /**
- * Main function to fetch and process Fubo data
+ * Main function to fetch data from Fubo API (or mock data)
+ * @param endpoints - Array of endpoints to fetch
+ * @param options - Configuration options for the fetch
+ * @returns Object with data from all requested endpoints
  */
 export async function fetchFuboData(
-  endpoints: (keyof typeof CONFIG.ENDPOINTS)[] = ['matches', 'movies', 'series'],
-  options?: { useMockData?: boolean; useCorsProxy?: boolean }
+  endpoints: (keyof typeof CONFIG.ENDPOINTS)[] | keyof typeof CONFIG.ENDPOINTS, 
+  options?: { 
+    useMockData?: boolean; 
+    useCorsProxy?: boolean;
+    useNextjsProxy?: boolean;
+  }
 ): Promise<FuboDataResult> {
-  // Update configuration with provided options
+  // Get endpoints array
+  const endpointsToFetch: (keyof typeof CONFIG.ENDPOINTS)[] = 
+    Array.isArray(endpoints) ? endpoints : [endpoints];
+  
+  // Apply options
   if (options) {
-    if (options.useMockData !== undefined) {
+    if (typeof options.useMockData === 'boolean') {
       CONFIG.USE_MOCK_DATA = options.useMockData;
+      
+      // Store the setting in localStorage
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('fubo_use_mock_data', options.useMockData.toString());
+      }
     }
-    if (options.useCorsProxy !== undefined) {
+    
+    if (typeof options.useCorsProxy === 'boolean') {
       CONFIG.USE_CORS_PROXY = options.useCorsProxy;
+      
+      // Store the setting in localStorage
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('fubo_use_cors_proxy', options.useCorsProxy.toString());
+      }
+    }
+    
+    if (typeof options.useNextjsProxy === 'boolean') {
+      CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY = options.useNextjsProxy;
+      CONFIG.PROXY_OPTIONS.USE_EXTERNAL_PROXY = !options.useNextjsProxy && CONFIG.USE_CORS_PROXY;
+      
+      // Store the setting in localStorage
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('fubo_use_nextjs_proxy', options.useNextjsProxy.toString());
+      }
     }
   }
   
@@ -690,7 +764,7 @@ export async function fetchFuboData(
   
   // Fetch data from each endpoint
   await Promise.all(
-    endpoints.map(async (endpoint) => {
+    endpointsToFetch.map(async (endpoint) => {
       const data = await fetchWithRetry(CONFIG.ENDPOINTS[endpoint]);
       
       // Process data based on endpoint type

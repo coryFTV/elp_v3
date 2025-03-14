@@ -2,14 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { fetchFuboData, FuboDataResult, ProcessedMatch, clearCache } from '../../services/data/fuboDataService';
 
 /**
- * Example component that demonstrates how to use the Fubo data service
+ * Example component showing how to use the Fubo data service to fetch sports matches
  */
 export default function FuboDataExample({ 
   useMockData = false, 
-  useCorsProxy = true 
+  useCorsProxy = true,
+  useNextjsProxy = true
 }: {
   useMockData?: boolean;
   useCorsProxy?: boolean;
+  useNextjsProxy?: boolean;
 }) {
   const [data, setData] = useState<FuboDataResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -23,23 +25,23 @@ export default function FuboDataExample({
         setLoading(true);
         setError(null);
         
-        // Pass the config options to the fetchFuboData function
+        // Fetch data from Fubo service
         const result = await fetchFuboData(
           ['matches', 'movies', 'series'], 
           { useMockData, useCorsProxy }
         );
         
         setData(result);
+        setLastRefresh(new Date());
       } catch (err) {
-        console.error('Error loading Fubo data:', err);
-        setError('Failed to load data. Please try again later.');
+        setError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [useMockData, useCorsProxy, lastRefresh]);
+  }, [useMockData, useCorsProxy, useNextjsProxy, lastRefresh]);
 
   // Filter matches based on active tab
   const getFilteredMatches = (): ProcessedMatch[] => {
@@ -80,6 +82,7 @@ export default function FuboDataExample({
       <div className="mb-4 text-sm text-gray-600">
         <p><strong>Data Source:</strong> {useMockData ? 'Mock Data' : 'Real API'}</p>
         <p><strong>CORS Proxy:</strong> {useCorsProxy ? 'Enabled' : 'Disabled'}</p>
+        <p><strong>Next.js Proxy:</strong> {useNextjsProxy ? 'Enabled' : 'Disabled'}</p>
         <p><strong>Last Refreshed:</strong> {lastRefresh.toLocaleTimeString()}</p>
       </div>
       

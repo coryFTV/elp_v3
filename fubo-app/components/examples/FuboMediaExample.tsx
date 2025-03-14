@@ -6,10 +6,12 @@ import { fetchFuboData, FuboDataResult, ProcessedMovie, ProcessedSeries, clearCa
  */
 export default function FuboMediaExample({ 
   useMockData = false, 
-  useCorsProxy = true 
+  useCorsProxy = true,
+  useNextjsProxy = true
 }: {
   useMockData?: boolean;
   useCorsProxy?: boolean;
+  useNextjsProxy?: boolean;
 }) {
   const [data, setData] = useState<FuboDataResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -27,7 +29,7 @@ export default function FuboMediaExample({
         // Pass the config options to the fetchFuboData function
         const result = await fetchFuboData(
           ['movies', 'series'], 
-          { useMockData, useCorsProxy }
+          { useMockData, useCorsProxy, useNextjsProxy }
         );
         
         setData(result);
@@ -40,7 +42,7 @@ export default function FuboMediaExample({
     };
 
     loadData();
-  }, [useMockData, useCorsProxy, lastRefresh]);
+  }, [useMockData, useCorsProxy, useNextjsProxy, lastRefresh]);
 
   // Filter media based on search term
   const getFilteredMedia = () => {

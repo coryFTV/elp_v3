@@ -5,7 +5,10 @@ import FuboMediaExample from '../../components/examples/FuboMediaExample';
 import { 
   isUsingMockData, 
   isUsingCorsProxy, 
-  clearCache 
+  clearCache,
+  toggleMockData,
+  toggleProxyMethod,
+  getProxyMethod
 } from '../../services/data/fuboDataService';
 
 /**
@@ -16,69 +19,54 @@ export default function FuboDataPage() {
   const [apiStatus, setApiStatus] = useState<'checking' | 'success' | 'error'>('checking');
   const [apiMessage, setApiMessage] = useState<string>('Checking API connection...');
   const [useMockData, setUseMockData] = useState<boolean>(false);
-  const [useCorsProxy, setUseCorsProxy] = useState<boolean>(true); // Default to true
+  const [proxyMethod, setProxyMethod] = useState<'nextjs' | 'external' | 'none'>('nextjs');
 
-  // Check API connection on load and get settings
+  // Initialize state from localStorage on mount
   useEffect(() => {
-    // Get current settings
-    setUseMockData(isUsingMockData());
-    setUseCorsProxy(isUsingCorsProxy());
-    
-    const checkApiConnection = async () => {
-      try {
-        setApiStatus('checking');
-        setApiMessage('Checking API connection...');
-        
-        // Just check if we can connect, using no-cors mode to avoid CORS errors
-        // This won't actually fetch any data but will tell us if the API is reachable
-        const response = await fetch('https://metadata-feeds.fubo.tv/Test/matches.json', { 
-          mode: 'no-cors',
-          method: 'HEAD'
-        });
-        
-        setApiStatus('success');
-        setApiMessage('API connection successful. You can access the Fubo API.');
-      } catch (error) {
-        setApiStatus('error');
-        setApiMessage(`API connection failed: ${error instanceof Error ? error.message : String(error)}`);
+    if (typeof window !== 'undefined') {
+      // Get mock data setting
+      const storedMockSetting = window.localStorage.getItem('fubo_use_mock_data');
+      if (storedMockSetting !== null) {
+        setUseMockData(storedMockSetting === 'true');
       }
-    };
-    
-    checkApiConnection();
+      
+      // Get proxy method
+      setProxyMethod(getProxyMethod());
+    }
   }, []);
 
-  // Toggle mock data
-  const handleToggleMockData = () => {
-    const newMockStatus = !useMockData;
-    setUseMockData(newMockStatus);
-    
-    // Save setting to localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('fubo_use_mock_data', String(newMockStatus));
-    }
-    
-    // Clear cache when changing data source
-    clearCache();
+  // Handle data source toggle
+  const handleDataSourceToggle = () => {
+    const newValue = toggleMockData();
+    setUseMockData(newValue);
+  };
+
+  // Handle proxy method change
+  const handleProxyMethodChange = (method: 'nextjs' | 'external' | 'none') => {
+    toggleProxyMethod(method);
+    setProxyMethod(method);
   };
 
   // Toggle CORS proxy
   const handleToggleCorsProxy = () => {
-    const newProxyStatus = !useCorsProxy;
-    setUseCorsProxy(newProxyStatus);
+    const newProxyStatus = !isUsingCorsProxy();
+    if (newProxyStatus) {
+      toggleProxyMethod('nextjs');
+    }
     
     // Save setting to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem('fubo_use_cors_proxy', String(newProxyStatus));
     }
     
-    // Clear cache when changing proxy setting
+    // Clear cache when changing proxy settings
     clearCache();
   };
 
-  // Clear cache and reload
+  // Clear cache
   const handleClearCache = () => {
     clearCache();
-    alert('Cache cleared successfully!');
+    alert('Cache cleared!');
   };
 
   return (
@@ -88,107 +76,97 @@ export default function FuboDataPage() {
         <meta name="description" content="Examples of Fubo data integration" />
       </Head>
 
-      <h1 className="text-3xl font-bold mb-8 text-center">Fubo Data Integration Examples</h1>
-      
-      {/* API Status Banner */}
-      <div className={`mb-6 p-4 rounded-lg ${
-        apiStatus === 'checking' ? 'bg-blue-100 border border-blue-300' :
-        apiStatus === 'success' ? 'bg-green-100 border border-green-300' :
-        'bg-red-100 border border-red-300'
-      }`}>
-        <div className="flex items-center">
-          <div className={`w-3 h-3 rounded-full mr-2 ${
-            apiStatus === 'checking' ? 'bg-blue-500' :
-            apiStatus === 'success' ? 'bg-green-500' :
-            'bg-red-500'
-          }`}></div>
-          <p className={`font-medium ${
-            apiStatus === 'checking' ? 'text-blue-700' :
-            apiStatus === 'success' ? 'text-green-700' :
-            'text-red-700'
-          }`}>
-            {apiMessage}
-          </p>
-        </div>
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold mb-4">Fubo Data Examples</h1>
         
-        <div className="mt-4 flex flex-col space-y-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="mr-2 font-medium">Data Source: </span>
-              <span className={`px-2 py-1 rounded text-xs font-bold ${useMockData ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'}`}>
-                {useMockData ? 'MOCK DATA' : 'REAL API DATA'}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <h2 className="text-xl font-semibold mb-2">Data Source Settings</h2>
+          
+          <div className="flex flex-col gap-4 mb-4">
+            {/* Data Source Toggle */}
+            <div className="flex items-center">
+              <button
+                onClick={handleDataSourceToggle}
+                className={`px-4 py-2 rounded-md transition-colors ${
+                  useMockData 
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white' 
+                    : 'bg-green-500 hover:bg-green-600 text-white'
+                }`}
+              >
+                {useMockData ? 'Using Mock Data' : 'Using Real API Data'}
+              </button>
+              <span className="ml-2 text-sm text-gray-600">
+                {useMockData 
+                  ? 'Using local mock data, no network requests' 
+                  : 'Fetching real data from Fubo API'
+                }
               </span>
             </div>
             
-            <button
-              onClick={handleToggleMockData}
-              className="px-3 py-1 text-xs font-medium rounded bg-gray-200 hover:bg-gray-300"
-            >
-              Switch to {useMockData ? 'real API' : 'mock'} data
-            </button>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="mr-2 font-medium">CORS Proxy: </span>
-              <span className={`px-2 py-1 rounded text-xs font-bold ${useCorsProxy ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
-                {useCorsProxy ? 'ENABLED' : 'DISABLED'}
-              </span>
+            {/* Proxy Method Selection */}
+            <div className="flex flex-col">
+              <label className="font-medium mb-1">CORS Proxy Method:</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleProxyMethodChange('nextjs')}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    proxyMethod === 'nextjs' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-200 hover:bg-gray-300'
+                  }`}
+                >
+                  Next.js API Proxy
+                </button>
+                <button
+                  onClick={() => handleProxyMethodChange('external')}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    proxyMethod === 'external' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-200 hover:bg-gray-300'
+                  }`}
+                >
+                  External Proxy
+                </button>
+                <button
+                  onClick={() => handleProxyMethodChange('none')}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    proxyMethod === 'none' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-200 hover:bg-gray-300'
+                  }`}
+                >
+                  No Proxy
+                </button>
+              </div>
+              <p className="mt-1 text-sm text-gray-600">
+                {proxyMethod === 'nextjs' 
+                  ? 'Using Next.js API route proxy (no CORS issues, works on all environments)' 
+                  : proxyMethod === 'external'
+                    ? 'Using external CORS proxy service (may have rate limits)' 
+                    : 'Direct API access (may have CORS issues on localhost)'
+                }
+              </p>
             </div>
-            
-            <button
-              onClick={handleToggleCorsProxy}
-              className="px-3 py-1 text-xs font-medium rounded bg-gray-200 hover:bg-gray-300"
-              disabled={!useMockData && !useCorsProxy && apiStatus !== 'success'}
-            >
-              {useCorsProxy ? 'Disable' : 'Enable'} CORS Proxy
-            </button>
-          </div>
-          
-          <div className="flex justify-end">
-            <button
-              onClick={handleClearCache}
-              className="px-3 py-1 text-xs font-medium rounded bg-red-100 text-red-700 hover:bg-red-200"
-            >
-              Clear cache
-            </button>
           </div>
         </div>
-      </div>
-      
-      <div className="flex justify-center mb-8">
-        <div className="inline-flex rounded-md shadow-sm" role="group">
-          <button
-            type="button"
-            className={`px-4 py-2 text-sm font-medium rounded-l-lg border ${
-              activeTab === 'matches'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-            }`}
-            onClick={() => setActiveTab('matches')}
-          >
-            Sports Matches
-          </button>
-          <button
-            type="button"
-            className={`px-4 py-2 text-sm font-medium rounded-r-lg border ${
-              activeTab === 'media'
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-            }`}
-            onClick={() => setActiveTab('media')}
-          >
-            Movies & Series
-          </button>
-        </div>
-      </div>
 
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {activeTab === 'matches' ? (
-          <FuboDataExample useMockData={useMockData} useCorsProxy={useCorsProxy} />
-        ) : (
-          <FuboMediaExample useMockData={useMockData} useCorsProxy={useCorsProxy} />
-        )}
+        <div className="grid grid-cols-1 gap-8">
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <h2 className="text-xl font-semibold mb-4">Sports Matches</h2>
+            <FuboDataExample
+              useMockData={useMockData}
+              useCorsProxy={proxyMethod !== 'none'}
+            />
+          </div>
+          
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <h2 className="text-xl font-semibold mb-4">Movies & TV Series</h2>
+            <FuboMediaExample
+              useMockData={useMockData}
+              useCorsProxy={proxyMethod !== 'none'}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="mt-8 p-6 bg-gray-50 rounded-lg shadow-sm">
