@@ -147,6 +147,20 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Track error counts to limit retries in case of persistent errors
+const errorCounts = {
+  nextjs: 0,
+  external: 0,
+  none: 0,
+};
+
+// Reset error counts
+export function resetErrorCounts(): void {
+  errorCounts.nextjs = 0;
+  errorCounts.external = 0;
+  errorCounts.none = 0;
+}
+
 /**
  * Toggle between different proxy methods
  */
@@ -169,6 +183,9 @@ export function toggleProxyMethod(method: 'nextjs' | 'external' | 'none'): void 
   if (typeof window !== 'undefined') {
     window.localStorage.setItem('fubo_use_cors_proxy', CONFIG.USE_CORS_PROXY.toString());
     window.localStorage.setItem('fubo_use_nextjs_proxy', CONFIG.PROXY_OPTIONS.USE_NEXTJS_PROXY.toString());
+    
+    // Add a flag to prevent rapid switching and requests
+    window.localStorage.setItem('fubo_proxy_last_changed', Date.now().toString());
   }
   
   // Clear cache when changing proxy settings
@@ -594,9 +611,43 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     return localStorageData;
   }
   
+  // Check if we've switched proxy methods recently (within last 2 seconds)
+  // This helps prevent rapid switching and excessive requests
+  if (typeof window !== 'undefined') {
+    const lastChanged = parseInt(window.localStorage.getItem('fubo_proxy_last_changed') || '0');
+    const timeSinceChange = Date.now() - lastChanged;
+    if (timeSinceChange < 2000) {
+      // Wait a bit to prevent rapid requests after switching proxies
+      await new Promise(resolve => setTimeout(resolve, 2000 - timeSinceChange));
+    }
+  }
+  
   // If mock data is enabled, return that instead of making network requests
   if (CONFIG.USE_MOCK_DATA) {
     console.log(`Using mock data for ${endpoint}`);
+    const endpointKey = cacheKey as keyof typeof MOCK_DATA;
+    const mockData = MOCK_DATA[endpointKey] || [];
+    
+    // Cache the mock data
+    memoryCache[cacheKey] = {
+      data: mockData,
+      timestamp: Date.now(),
+    };
+    
+    // Also cache in localStorage
+    setLocalStorageCache(cacheKey, mockData);
+    
+    return mockData;
+  }
+  
+  // Get current proxy method
+  const currentMethod = getProxyMethod();
+  
+  // Check if error count is too high for current method (over 5 errors)
+  if (errorCounts[currentMethod] > 5) {
+    console.warn(`Too many errors with ${currentMethod} proxy method, falling back to mock data`);
+    
+    // Return mock data when proxy method has too many errors
     const endpointKey = cacheKey as keyof typeof MOCK_DATA;
     const mockData = MOCK_DATA[endpointKey] || [];
     
@@ -664,6 +715,18 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
       return [];
     }
     
+    // Check if the response has X-Data-Source header
+    // If it's "mock", it means our API proxy returned mock data
+    const dataSource = response.headers.get('X-Data-Source');
+    if (dataSource === 'mock' && !CONFIG.USE_MOCK_DATA) {
+      // Increment error counter for the current method
+      errorCounts[currentMethod]++;
+      console.warn(`API proxy returned mock data, incrementing error count for ${currentMethod} to ${errorCounts[currentMethod]}`);
+    } else {
+      // Reset error counter for successful real API data
+      errorCounts[currentMethod] = 0;
+    }
+    
     const data = await response.json();
     console.log(`Successfully fetched data from ${url}:`, data.length ? `${data.length} items` : 'empty response');
     
@@ -679,6 +742,10 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     return data;
   } catch (error) {
     console.error(`Error fetching ${url}:`, error);
+    
+    // Increment error counter for this proxy method
+    errorCounts[currentMethod]++;
+    console.warn(`Error with ${currentMethod} proxy method, error count now: ${errorCounts[currentMethod]}`);
     
     if (retries > 0) {
       console.warn(`Retrying... (${retries} retries left)`);
