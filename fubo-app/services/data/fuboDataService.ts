@@ -117,7 +117,7 @@ const CONFIG = {
   // Set to true to use CORS proxy for API requests
   USE_CORS_PROXY: true,
   // CORS proxy base URL - replace with your preferred proxy
-  CORS_PROXY_URL: 'https://corsproxy.io/?',
+  CORS_PROXY_URL: 'https://cors-anywhere.herokuapp.com/',
   // Set to true to use no-cors mode (will result in opaque response)
   USE_NO_CORS_MODE: false,
 };
@@ -517,11 +517,16 @@ function processMovies(movies: RawMovie[]): ProcessedMovie[] {
  * Fetch data from a single endpoint with retry logic
  */
 async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): Promise<any> {
-  let url = `${getBaseUrl()}/${endpoint}`;
+  let url;
   
-  // If we're using the CORS proxy and the URL already includes the proxy, don't add endpoint with slash
-  if (url.includes(CONFIG.CORS_PROXY_URL)) {
-    url = `${getBaseUrl()}${endpoint}`;
+  // Construct the URL differently depending on whether we're using the CORS proxy
+  if (CONFIG.USE_CORS_PROXY && 
+      typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    // When using CORS proxy, we need to encode the entire URL including the endpoint
+    url = `${CONFIG.CORS_PROXY_URL}${CONFIG.BASE_URL}/${endpoint}`;
+  } else {
+    url = `${getBaseUrl()}/${endpoint}`;
   }
   
   try {

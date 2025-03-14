@@ -1,4 +1,5 @@
 import { Match } from '../types/match';
+import { fetchFuboData } from './data/fuboDataService';
 
 // Define a function to get the data URL - makes testing easier
 export const getDataUrl = (): string => {
@@ -10,8 +11,48 @@ export const getDataUrl = (): string => {
   return '/data/sampleMatches.json';
 };
 
+// Convert Fubo matches to app Match type
+const convertFuboMatchesToAppFormat = (fuboMatches: any[]): Match[] => {
+  return fuboMatches.map(fuboMatch => ({
+    id: fuboMatch.id,
+    title: fuboMatch.title,
+    hometeam: fuboMatch.hometeam || '',
+    awayteam: fuboMatch.awayteam || '',
+    hometeamabbr: fuboMatch.hometeamabbr || '',
+    awayteamabbr: fuboMatch.awayteamabbr || '',
+    hometeamID: fuboMatch.hometeamID || '0',
+    awayteamID: fuboMatch.awayteamID || '0',
+    starttime: fuboMatch.starttime,
+    endtime: fuboMatch.endtime,
+    sport: fuboMatch.sport || '',
+    league: fuboMatch.league || '',
+    league_id: fuboMatch.league_id || '',
+    network: Array.isArray(fuboMatch.network) ? fuboMatch.network[0] : fuboMatch.network || '',
+    networkUrl: fuboMatch.networkUrl || '',
+    matchId: fuboMatch.matchId || fuboMatch.id,
+    matchUrl: fuboMatch.matchUrl || fuboMatch.url || '',
+    thumbnail: fuboMatch.thumbnail || '',
+    country: fuboMatch.country || 'US',
+    url: fuboMatch.url || '',
+    regionalRestrictions: fuboMatch.regionalRestrictions || false
+  }));
+};
+
 export const fetchMatches = async (): Promise<Match[]> => {
   try {
+    // First try to fetch from Fubo data service
+    try {
+      const fuboData = await fetchFuboData(['matches']);
+      if (fuboData.matches && fuboData.matches.length > 0) {
+        console.log('Using Fubo API data for matches');
+        return convertFuboMatchesToAppFormat(fuboData.matches);
+      }
+    } catch (fuboError) {
+      console.warn('Error fetching from Fubo API, falling back to sample data:', fuboError);
+    }
+    
+    // Fallback to sample data
+    console.log('Using sample data for matches');
     const response = await fetch(getDataUrl());
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);

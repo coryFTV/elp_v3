@@ -35,7 +35,7 @@ export default function FuboDataPage() {
         
         // If using CORS proxy
         if (useCorsProxy) {
-          url = `https://corsproxy.io/?${url}`;
+          url = `https://cors-anywhere.herokuapp.com/${url}`;
         }
         
         const response = await fetch(url);
@@ -223,6 +223,15 @@ export default function FuboDataPage() {
             <p className="text-sm text-gray-700">
               Enable the CORS proxy to access the API directly from localhost. This routes requests through a third-party proxy that adds the proper CORS headers.
             </p>
+            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-xs text-yellow-700">
+                <strong>Note:</strong> The CORS proxy (cors-anywhere.herokuapp.com) has request limitations. 
+                If you encounter a 429 error (Too Many Requests), you may need to temporarily switch to mock data 
+                or visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" className="underline hover:text-yellow-900" target="_blank" rel="noopener noreferrer">
+                  https://cors-anywhere.herokuapp.com/corsdemo
+                </a> to request temporary access.
+              </p>
+            </div>
           </div>
           
           <div>
