@@ -112,6 +112,212 @@ const CONFIG = {
   CACHE_TTL: 15 * 60 * 1000, // 15 minutes in milliseconds
   MAX_RETRIES: 3,
   RETRY_DELAY: 1000, // 1 second
+  // Set to false by default to use real API data
+  USE_MOCK_DATA: false,
+};
+
+// Check if we should use mock data from localStorage
+if (typeof window !== 'undefined') {
+  const storedMockSetting = window.localStorage.getItem('fubo_use_mock_data');
+  if (storedMockSetting !== null) {
+    CONFIG.USE_MOCK_DATA = storedMockSetting === 'true';
+  }
+}
+
+/**
+ * Toggle between mock and real data
+ */
+export function toggleMockData(useMock?: boolean): boolean {
+  if (typeof useMock === 'boolean') {
+    CONFIG.USE_MOCK_DATA = useMock;
+  } else {
+    CONFIG.USE_MOCK_DATA = !CONFIG.USE_MOCK_DATA;
+  }
+  
+  // Store the setting in localStorage
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem('fubo_use_mock_data', CONFIG.USE_MOCK_DATA.toString());
+  }
+  
+  // Clear cache when switching data sources
+  clearCache();
+  
+  return CONFIG.USE_MOCK_DATA;
+}
+
+/**
+ * Check if we're using mock data
+ */
+export function isUsingMockData(): boolean {
+  return CONFIG.USE_MOCK_DATA;
+}
+
+// Mock data for local development
+const MOCK_DATA = {
+  matches: [
+    {
+      id: '29689504',
+      title: 'Cancun Men\'s & Women\'s Round of 16 (Secondary Court)',
+      hometeam: '',
+      awayteam: '',
+      hometeamabbr: '',
+      awayteamabbr: '',
+      hometeamID: '0',
+      awayteamID: '0',
+      starttime: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+      endtime: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+      sport: 'Padel',
+      league: 'Premier Padel Major',
+      league_id: '23196420',
+      network: 'beIN SPORTS 7',
+      networkUrl: 'https://www.fubo.tv/welcome/channel/be-in-sports-7',
+      matchId: 'EP044993071016',
+      matchUrl: 'https://www.fubo.tv/welcome/matches/EP044993071016',
+      thumbnail: 'https://gn-imgx.fubo.tv/assets/p23196420_i_h2_ab.jpg',
+      country: 'US',
+      url: 'https://www.fubo.tv/welcome/leagues/23196420',
+      regionalRestrictions: false
+    },
+    {
+      id: '29689505',
+      title: 'Cancun Men\'s & Women\'s Round of 16 (Main Court)',
+      hometeam: '',
+      awayteam: '',
+      hometeamabbr: '',
+      awayteamabbr: '',
+      hometeamID: '0',
+      awayteamID: '0',
+      starttime: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+      endtime: new Date(Date.now() + 7200000).toISOString(), // 2 hours from now
+      sport: 'Padel',
+      league: 'Premier Padel Major',
+      league_id: '23196420',
+      network: 'beIN SPORTS 8',
+      networkUrl: 'https://www.fubo.tv/welcome/channel/be-in-sports-8',
+      matchId: 'EP044993071017',
+      matchUrl: 'https://www.fubo.tv/welcome/matches/EP044993071017',
+      thumbnail: 'https://gn-imgx.fubo.tv/assets/p23196420_i_h2_ab.jpg',
+      country: 'US',
+      url: 'https://www.fubo.tv/welcome/leagues/23196420',
+      regionalRestrictions: false
+    },
+    {
+      id: '29689506',
+      title: 'Cancun Men\'s & Women\'s Round of 16 (Main Court)', // Duplicate title with different network
+      hometeam: '',
+      awayteam: '',
+      hometeamabbr: '',
+      awayteamabbr: '',
+      hometeamID: '0',
+      awayteamID: '0',
+      starttime: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+      endtime: new Date(Date.now() + 7200000).toISOString(), // 2 hours from now
+      sport: 'Padel',
+      league: 'Premier Padel Major',
+      league_id: '23196420',
+      network: 'beIN SPORTS 9', // Different network
+      networkUrl: 'https://www.fubo.tv/welcome/channel/be-in-sports-9',
+      matchId: 'EP044993071018',
+      matchUrl: 'https://www.fubo.tv/welcome/matches/EP044993071018',
+      thumbnail: 'https://gn-imgx.fubo.tv/assets/p23196420_i_h2_ab.jpg',
+      country: 'US',
+      url: 'https://www.fubo.tv/welcome/leagues/23196420',
+      regionalRestrictions: false
+    },
+    {
+      id: '29689507',
+      title: 'Past Match',
+      hometeam: '',
+      awayteam: '',
+      hometeamabbr: '',
+      awayteamabbr: '',
+      hometeamID: '0',
+      awayteamID: '0',
+      starttime: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+      endtime: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+      sport: 'Padel',
+      league: 'Premier Padel Major',
+      league_id: '23196420',
+      network: 'beIN SPORTS 7',
+      networkUrl: 'https://www.fubo.tv/welcome/channel/be-in-sports-7',
+      matchId: 'EP044993071019',
+      matchUrl: 'https://www.fubo.tv/welcome/matches/EP044993071019',
+      thumbnail: 'https://gn-imgx.fubo.tv/assets/p23196420_i_h2_ab.jpg',
+      country: 'US',
+      url: 'https://www.fubo.tv/welcome/leagues/23196420',
+      regionalRestrictions: true
+    }
+  ],
+  series: [
+    {
+      id: 11554779,
+      title: 'Curious Traveler',
+      description: 'Christine Van Blokland explores European and North American cities.',
+      originalAiringDate: '2015-04-03',
+      rating: 'TVG',
+      network: 'Filmhub',
+      thumbnail: 'https://gn-imgx.fubo.tv/assets/p11554779_i_h2_ab.jpg',
+      url: 'https://www.fubo.tv/welcome/series/115959687/curious-traveler',
+      genre: 'Travel',
+      deepLink: 'https://www.fubo.tv/welcome/series/115959687/curious-traveler',
+      episodes: []
+    },
+    {
+      id: 11554780,
+      title: 'Expedition Unknown',
+      description: 'Josh Gates investigates the world\'s most intriguing legends and mysteries.',
+      originalAiringDate: '2015-01-08',
+      rating: 'TVPG',
+      network: 'Discovery',
+      thumbnail: 'https://gn-imgx.fubo.tv/assets/p11554780_i_h2_ab.jpg',
+      url: 'https://www.fubo.tv/welcome/series/115959688/expedition-unknown',
+      genre: 'Adventure',
+      deepLink: 'https://www.fubo.tv/welcome/series/115959688/expedition-unknown',
+      episodes: []
+    }
+  ],
+  movies: [
+    {
+      id: 'MV014063680000',
+      title: '#HatersMakeMeFamous',
+      shortDescription: 'A man\'s story since being a kid in the foster care system.',
+      longDescription: 'Chris Martin\'s story, from being a kid in the foster care system to an adult in the prison system...',
+      network: 'Independent',
+      releaseYear: 2019,
+      duration: 90,
+      durationSeconds: 5437,
+      rating: 'TV-G',
+      genres: ['Documentary'],
+      directors: ['Sam Erdmann', 'Tray Goodman'],
+      actors: [],
+      licenseWindowStart: '2024-05-11T00:00:00Z',
+      licenseWindowEnd: '2099-01-01T00:00:00Z',
+      poster: 'https://gn-imgx.fubo.tv/assets/p14063680_i_h10_aa.jpg',
+      url: 'https://www.fubo.tv/welcome/program/MV014063680000',
+      deepLink: 'https://www.fubo.tv/welcome/program/MV014063680000',
+      tmsId: 'MV014063680000'
+    },
+    {
+      id: 'MV014063680001',
+      title: 'The Last Dance',
+      shortDescription: 'A documentary about Michael Jordan and the Chicago Bulls\' quest for a sixth NBA Championship.',
+      longDescription: 'A 10-part documentary chronicling the untold story of Michael Jordan and the Chicago Bulls dynasty...',
+      network: 'ESPN',
+      releaseYear: 2020,
+      duration: 500,
+      durationSeconds: 30000,
+      rating: 'TV-MA',
+      genres: ['Documentary', 'Sports'],
+      directors: ['Jason Hehir'],
+      actors: ['Michael Jordan', 'Scottie Pippen', 'Dennis Rodman'],
+      licenseWindowStart: '2024-01-01T00:00:00Z',
+      licenseWindowEnd: '2099-01-01T00:00:00Z',
+      poster: 'https://gn-imgx.fubo.tv/assets/p14063681_i_h10_aa.jpg',
+      url: 'https://www.fubo.tv/welcome/program/MV014063680001',
+      deepLink: 'https://www.fubo.tv/welcome/program/MV014063680001',
+      tmsId: 'MV014063680001'
+    }
+  ]
 };
 
 // In-memory cache
@@ -130,8 +336,13 @@ export function clearCache(): void {
  * Check if the domain is valid for CORS
  */
 function isValidDomain(): boolean {
-  const hostname = window.location.hostname;
-  return hostname.endsWith('.fubo.tv') || hostname === 'localhost' || hostname === '127.0.0.1';
+  // In a browser environment
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    return hostname.endsWith('.fubo.tv') || hostname === 'localhost' || hostname === '127.0.0.1';
+  }
+  // In a server-side rendering environment
+  return true;
 }
 
 /**
@@ -139,10 +350,10 @@ function isValidDomain(): boolean {
  */
 function getBaseUrl(): string {
   // If we're not on a valid domain, log a warning
-  if (!isValidDomain()) {
+  if (typeof window !== 'undefined' && !isValidDomain()) {
     console.warn('Warning: Current domain may not be allowed by CORS. Requests might fail.');
-    console.warn('For local development, add "127.0.0.1 your-site.fubo.tv" to /etc/hosts');
-    console.warn('and configure your local server to run on your-site.fubo.tv:<port>');
+    console.warn('For local development, add "127.0.0.1 dev.fubo.tv" to /etc/hosts');
+    console.warn('and configure your local server to run on dev.fubo.tv:3000');
   }
   
   return CONFIG.BASE_URL;
@@ -275,14 +486,43 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
       return cachedData.data;
     }
     
+    // Use mock data for local development if enabled
+    if (CONFIG.USE_MOCK_DATA) {
+      console.log(`Using mock data for ${endpoint}`);
+      // Determine which mock data to return based on the endpoint
+      const endpointKey = endpoint.replace('.json', '') as keyof typeof MOCK_DATA;
+      const mockData = MOCK_DATA[endpointKey] || [];
+      
+      // Cache the mock data
+      memoryCache[cacheKey] = {
+        data: mockData,
+        timestamp: Date.now(),
+      };
+      
+      return mockData;
+    }
+    
     // Fetch from API
-    const response = await fetch(url);
+    console.log(`Fetching real data from ${url}`);
+    
+    // Add a timestamp to bypass cache
+    const fetchUrl = `${url}?_t=${Date.now()}`;
+    const response = await fetch(fetchUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      // Include credentials for CORS requests
+      credentials: 'same-origin',
+    });
     
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
+      throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
     }
     
     const data = await response.json();
+    console.log(`Successfully fetched data from ${url}:`, data.length ? `${data.length} items` : 'empty response');
     
     // Cache the result
     memoryCache[cacheKey] = {
@@ -292,8 +532,10 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     
     return data;
   } catch (error) {
+    console.error(`Error fetching ${url}:`, error);
+    
     if (retries > 0) {
-      console.warn(`Error fetching ${endpoint}, retrying... (${retries} retries left)`);
+      console.warn(`Retrying... (${retries} retries left)`);
       
       // Wait before retrying
       await new Promise(resolve => setTimeout(resolve, CONFIG.RETRY_DELAY));
@@ -303,7 +545,19 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     }
     
     console.error(`Failed to fetch ${endpoint} after ${CONFIG.MAX_RETRIES} retries:`, error);
-    return [];
+    
+    // If all retries fail and we have mock data enabled, use mock data as fallback
+    if (CONFIG.USE_MOCK_DATA) {
+      console.log(`Falling back to mock data for ${endpoint}`);
+      const endpointKey = endpoint.replace('.json', '') as keyof typeof MOCK_DATA;
+      return MOCK_DATA[endpointKey] || [];
+    } else {
+      // If we're not using mock data, still fall back to mock data as a last resort
+      // This ensures the UI doesn't break completely
+      console.log(`All retries failed. Falling back to mock data for ${endpoint} as a last resort`);
+      const endpointKey = endpoint.replace('.json', '') as keyof typeof MOCK_DATA;
+      return MOCK_DATA[endpointKey] || [];
+    }
   }
 }
 
