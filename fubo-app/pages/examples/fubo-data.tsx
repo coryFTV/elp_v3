@@ -2,7 +2,13 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import FuboDataExample from '../../components/examples/FuboDataExample';
 import FuboMediaExample from '../../components/examples/FuboMediaExample';
-import { toggleMockData, isUsingMockData, clearCache } from '../../services/data/fuboDataService';
+import { 
+  toggleMockData, 
+  isUsingMockData, 
+  toggleCorsProxy,
+  isUsingCorsProxy, 
+  clearCache 
+} from '../../services/data/fuboDataService';
 
 /**
  * Example page that demonstrates the Fubo data service integration
@@ -12,18 +18,27 @@ export default function FuboDataPage() {
   const [apiStatus, setApiStatus] = useState<'checking' | 'success' | 'error'>('checking');
   const [apiMessage, setApiMessage] = useState<string>('Checking API connection...');
   const [useMockData, setUseMockData] = useState<boolean>(false);
+  const [useCorsProxy, setUseCorsProxy] = useState<boolean>(false);
 
-  // Check API connection on load and get mock data status
+  // Check API connection on load and get settings
   useEffect(() => {
-    // Get current mock data status
+    // Get current settings
     setUseMockData(isUsingMockData());
+    setUseCorsProxy(isUsingCorsProxy());
     
     const checkApiConnection = async () => {
       try {
         setApiStatus('checking');
         setApiMessage('Checking API connection...');
         
-        const response = await fetch('https://metadata-feeds.fubo.tv/Test/matches.json');
+        let url = 'https://metadata-feeds.fubo.tv/Test/matches.json';
+        
+        // If using CORS proxy
+        if (useCorsProxy) {
+          url = `https://corsproxy.io/?${url}`;
+        }
+        
+        const response = await fetch(url);
         
         if (response.ok) {
           const data = await response.json();
@@ -40,7 +55,7 @@ export default function FuboDataPage() {
     };
     
     checkApiConnection();
-  }, []);
+  }, [useCorsProxy]);
 
   // Toggle mock data
   const handleToggleMockData = () => {
@@ -49,6 +64,17 @@ export default function FuboDataPage() {
     setUseMockData(newMockStatus);
     
     // Force reload to apply the change
+    window.location.reload();
+  };
+
+  // Toggle CORS proxy
+  const handleToggleCorsProxy = () => {
+    // Toggle CORS proxy using the service function
+    const newProxyStatus = toggleCorsProxy();
+    setUseCorsProxy(newProxyStatus);
+    
+    // Clear cache and reload to apply the change
+    clearCache();
     window.location.reload();
   };
 
@@ -93,22 +119,40 @@ export default function FuboDataPage() {
           </p>
         </div>
         
-        <div className="mt-2 flex items-center justify-between">
-          <div>
-            <span className="mr-2 font-medium">Currently using: </span>
-            <span className={`px-2 py-1 rounded text-xs font-bold ${useMockData ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'}`}>
-              {useMockData ? 'MOCK DATA' : 'REAL API DATA'}
-            </span>
-          </div>
-          
-          <div className="flex space-x-2">
+        <div className="mt-4 flex flex-col space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="mr-2 font-medium">Data Source: </span>
+              <span className={`px-2 py-1 rounded text-xs font-bold ${useMockData ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'}`}>
+                {useMockData ? 'MOCK DATA' : 'REAL API DATA'}
+              </span>
+            </div>
+            
             <button
               onClick={handleToggleMockData}
               className="px-3 py-1 text-xs font-medium rounded bg-gray-200 hover:bg-gray-300"
             >
               Switch to {useMockData ? 'real API' : 'mock'} data
             </button>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="mr-2 font-medium">CORS Proxy: </span>
+              <span className={`px-2 py-1 rounded text-xs font-bold ${useCorsProxy ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
+                {useCorsProxy ? 'ENABLED' : 'DISABLED'}
+              </span>
+            </div>
             
+            <button
+              onClick={handleToggleCorsProxy}
+              className="px-3 py-1 text-xs font-medium rounded bg-gray-200 hover:bg-gray-300"
+            >
+              {useCorsProxy ? 'Disable' : 'Enable'} CORS Proxy
+            </button>
+          </div>
+          
+          <div className="flex justify-end">
             <button
               onClick={handleClearCache}
               className="px-3 py-1 text-xs font-medium rounded bg-red-100 text-red-700 hover:bg-red-200"
@@ -154,7 +198,7 @@ export default function FuboDataPage() {
         <h2 className="text-xl font-semibold mb-4">Implementation Notes</h2>
         <ul className="list-disc pl-5 space-y-2">
           <li>
-            <span className="font-medium">CORS Handling:</span> The data service automatically handles CORS constraints by checking the current domain.
+            <span className="font-medium">CORS Handling:</span> The data service automatically handles CORS constraints by checking the current domain and using a CORS proxy when needed.
           </li>
           <li>
             <span className="font-medium">Caching:</span> Data is cached for 15 minutes to reduce API calls and improve performance.
@@ -172,16 +216,35 @@ export default function FuboDataPage() {
       </div>
 
       <div className="mt-8 p-6 bg-blue-50 rounded-lg shadow-sm border border-blue-100">
-        <h2 className="text-xl font-semibold mb-4">Local Development</h2>
-        <p className="mb-4">
-          For local development, you may need to modify your <code className="bg-gray-100 px-1 py-0.5 rounded">/etc/hosts</code> file to map your local domain:
-        </p>
-        <pre className="bg-gray-800 text-white p-4 rounded-md overflow-x-auto">
-          127.0.0.1 dev.fubo.tv
-        </pre>
-        <p className="mt-4">
-          Then configure your local server to run on <code className="bg-gray-100 px-1 py-0.5 rounded">dev.fubo.tv:3000</code> to avoid CORS issues.
-        </p>
+        <h2 className="text-xl font-semibold mb-4">Local Development Options</h2>
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-lg font-medium mb-2">CORS Proxy (Recommended)</h3>
+            <p className="text-sm text-gray-700">
+              Enable the CORS proxy to access the API directly from localhost. This routes requests through a third-party proxy that adds the proper CORS headers.
+            </p>
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-medium mb-2">Domain Mapping</h3>
+            <p className="text-sm text-gray-700 mb-2">
+              For a more production-like setup, modify your <code className="bg-gray-100 px-1 py-0.5 rounded">/etc/hosts</code> file to map your local domain:
+            </p>
+            <pre className="bg-gray-800 text-white p-4 rounded-md overflow-x-auto">
+              127.0.0.1 dev.fubo.tv
+            </pre>
+            <p className="mt-2 text-sm text-gray-700">
+              Then configure your local server to run on <code className="bg-gray-100 px-1 py-0.5 rounded">dev.fubo.tv:3000</code> to avoid CORS issues.
+            </p>
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-medium mb-2">Mock Data</h3>
+            <p className="text-sm text-gray-700">
+              If you can't access the API for any reason, toggle to use mock data instead. This provides a consistent development experience without requiring API access.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

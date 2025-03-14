@@ -114,6 +114,12 @@ const CONFIG = {
   RETRY_DELAY: 1000, // 1 second
   // Set to false by default to use real API data
   USE_MOCK_DATA: false,
+  // Set to true to use CORS proxy for API requests
+  USE_CORS_PROXY: true,
+  // CORS proxy base URL - replace with your preferred proxy
+  CORS_PROXY_URL: 'https://corsproxy.io/?',
+  // Set to true to use no-cors mode (will result in opaque response)
+  USE_NO_CORS_MODE: false,
 };
 
 // Check if we should use mock data from localStorage
@@ -146,10 +152,38 @@ export function toggleMockData(useMock?: boolean): boolean {
 }
 
 /**
+ * Toggle CORS proxy usage
+ */
+export function toggleCorsProxy(useProxy?: boolean): boolean {
+  if (typeof useProxy === 'boolean') {
+    CONFIG.USE_CORS_PROXY = useProxy;
+  } else {
+    CONFIG.USE_CORS_PROXY = !CONFIG.USE_CORS_PROXY;
+  }
+  
+  // Store the setting in localStorage
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem('fubo_use_cors_proxy', CONFIG.USE_CORS_PROXY.toString());
+  }
+  
+  // Clear cache when changing proxy settings
+  clearCache();
+  
+  return CONFIG.USE_CORS_PROXY;
+}
+
+/**
  * Check if we're using mock data
  */
 export function isUsingMockData(): boolean {
   return CONFIG.USE_MOCK_DATA;
+}
+
+/**
+ * Check if we're using CORS proxy
+ */
+export function isUsingCorsProxy(): boolean {
+  return CONFIG.USE_CORS_PROXY;
 }
 
 // Mock data for local development
@@ -346,9 +380,11 @@ function isValidDomain(): boolean {
 }
 
 /**
- * Get the base URL for API requests
+ * Get the base URL for API requests, possibly using a CORS proxy
  */
 function getBaseUrl(): string {
+  const url = CONFIG.BASE_URL;
+  
   // If we're not on a valid domain, log a warning
   if (typeof window !== 'undefined' && !isValidDomain()) {
     console.warn('Warning: Current domain may not be allowed by CORS. Requests might fail.');
@@ -356,7 +392,14 @@ function getBaseUrl(): string {
     console.warn('and configure your local server to run on dev.fubo.tv:3000');
   }
   
-  return CONFIG.BASE_URL;
+  // If we're on localhost and using CORS proxy, prefix with proxy URL
+  if (typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && 
+      CONFIG.USE_CORS_PROXY) {
+    return `${CONFIG.CORS_PROXY_URL}${url}`;
+  }
+  
+  return url;
 }
 
 /**
@@ -474,7 +517,12 @@ function processMovies(movies: RawMovie[]): ProcessedMovie[] {
  * Fetch data from a single endpoint with retry logic
  */
 async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): Promise<any> {
-  const url = `${getBaseUrl()}/${endpoint}`;
+  let url = `${getBaseUrl()}/${endpoint}`;
+  
+  // If we're using the CORS proxy and the URL already includes the proxy, don't add endpoint with slash
+  if (url.includes(CONFIG.CORS_PROXY_URL)) {
+    url = `${getBaseUrl()}${endpoint}`;
+  }
   
   try {
     // Check cache first
@@ -506,19 +554,33 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     console.log(`Fetching real data from ${url}`);
     
     // Add a timestamp to bypass cache
-    const fetchUrl = `${url}?_t=${Date.now()}`;
-    const response = await fetch(fetchUrl, {
+    const fetchUrl = `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+    const fetchOptions: RequestInit = {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      // Include credentials for CORS requests
+      // Include credentials for CORS requests to same origin
       credentials: 'same-origin',
-    });
+    };
+    
+    // Use no-cors mode if configured
+    if (CONFIG.USE_NO_CORS_MODE) {
+      fetchOptions.mode = 'no-cors';
+      console.log('Using no-cors mode (response will be opaque)');
+    }
+    
+    const response = await fetch(fetchUrl, fetchOptions);
     
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+    }
+    
+    // If using no-cors, we can't read the response
+    if (CONFIG.USE_NO_CORS_MODE) {
+      console.warn('Using no-cors mode: Cannot read response data, returning empty array');
+      return [];
     }
     
     const data = await response.json();
@@ -546,18 +608,10 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     
     console.error(`Failed to fetch ${endpoint} after ${CONFIG.MAX_RETRIES} retries:`, error);
     
-    // If all retries fail and we have mock data enabled, use mock data as fallback
-    if (CONFIG.USE_MOCK_DATA) {
-      console.log(`Falling back to mock data for ${endpoint}`);
-      const endpointKey = endpoint.replace('.json', '') as keyof typeof MOCK_DATA;
-      return MOCK_DATA[endpointKey] || [];
-    } else {
-      // If we're not using mock data, still fall back to mock data as a last resort
-      // This ensures the UI doesn't break completely
-      console.log(`All retries failed. Falling back to mock data for ${endpoint} as a last resort`);
-      const endpointKey = endpoint.replace('.json', '') as keyof typeof MOCK_DATA;
-      return MOCK_DATA[endpointKey] || [];
-    }
+    // If all retries fail, fall back to mock data
+    console.log(`All retries failed. Falling back to mock data for ${endpoint}`);
+    const endpointKey = endpoint.replace('.json', '') as keyof typeof MOCK_DATA;
+    return MOCK_DATA[endpointKey] || [];
   }
 }
 
