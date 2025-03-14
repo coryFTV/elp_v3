@@ -116,8 +116,8 @@ const CONFIG = {
   USE_MOCK_DATA: false,
   // Set to true to use CORS proxy for API requests
   USE_CORS_PROXY: true,
-  // CORS proxy base URL - replace with your preferred proxy
-  CORS_PROXY_URL: 'https://cors-anywhere.herokuapp.com/',
+  // CORS proxy base URL - use a public proxy with no rate limits
+  CORS_PROXY_URL: 'https://api.allorigins.win/raw?url=',
   // Set to true to use no-cors mode (will result in opaque response)
   USE_NO_CORS_MODE: false,
 };
@@ -127,6 +127,11 @@ if (typeof window !== 'undefined') {
   const storedMockSetting = window.localStorage.getItem('fubo_use_mock_data');
   if (storedMockSetting !== null) {
     CONFIG.USE_MOCK_DATA = storedMockSetting === 'true';
+  }
+  
+  const storedCorsProxy = window.localStorage.getItem('fubo_use_cors_proxy');
+  if (storedCorsProxy !== null) {
+    CONFIG.USE_CORS_PROXY = storedCorsProxy === 'true';
   }
 }
 
@@ -354,16 +359,36 @@ const MOCK_DATA = {
   ]
 };
 
-// In-memory cache
+// In-memory cache with endpoint-specific entries
 const memoryCache: Record<string, CacheEntry> = {};
 
 /**
  * Clear the in-memory cache
+ * @param endpoint Optional specific endpoint to clear, if not provided clears all cache
  */
-export function clearCache(): void {
-  Object.keys(memoryCache).forEach(key => {
-    delete memoryCache[key];
-  });
+export function clearCache(endpoint?: string): void {
+  if (endpoint) {
+    // Clear only specific endpoint
+    const cacheKey = endpoint.replace('.json', '');
+    delete memoryCache[cacheKey];
+    
+    // Also clear from localStorage if available
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(`fubo_data_${cacheKey}`);
+    }
+  } else {
+    // Clear all cache
+    Object.keys(memoryCache).forEach(key => {
+      delete memoryCache[key];
+    });
+    
+    // Also clear from localStorage if available
+    if (typeof window !== 'undefined') {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('fubo_data_'))
+        .forEach(key => localStorage.removeItem(key));
+    }
+  }
 }
 
 /**
@@ -517,49 +542,58 @@ function processMovies(movies: RawMovie[]): ProcessedMovie[] {
  * Fetch data from a single endpoint with retry logic
  */
 async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): Promise<any> {
-  let url;
+  const cacheKey = endpoint.replace('.json', '');
   
-  // Construct the URL differently depending on whether we're using the CORS proxy
+  // First try the memory cache
+  const cachedData = memoryCache[cacheKey];
+  if (cachedData && (Date.now() - cachedData.timestamp) < CONFIG.CACHE_TTL) {
+    console.log(`Using memory cached data for ${endpoint}`);
+    return cachedData.data;
+  }
+  
+  // Then try localStorage cache
+  const localStorageData = getLocalStorageCache(cacheKey);
+  if (localStorageData) {
+    // Update memory cache with localStorage data
+    memoryCache[cacheKey] = {
+      data: localStorageData,
+      timestamp: Date.now(),
+    };
+    return localStorageData;
+  }
+  
+  // If mock data is enabled, return that instead of making network requests
+  if (CONFIG.USE_MOCK_DATA) {
+    console.log(`Using mock data for ${endpoint}`);
+    const endpointKey = cacheKey as keyof typeof MOCK_DATA;
+    const mockData = MOCK_DATA[endpointKey] || [];
+    
+    // Cache the mock data
+    memoryCache[cacheKey] = {
+      data: mockData,
+      timestamp: Date.now(),
+    };
+    
+    // Also cache in localStorage
+    setLocalStorageCache(cacheKey, mockData);
+    
+    return mockData;
+  }
+  
+  // Construct the URL based on CORS proxy settings
+  let url;
   if (CONFIG.USE_CORS_PROXY && 
       typeof window !== 'undefined' && 
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    // When using CORS proxy, we need to encode the entire URL including the endpoint
-    url = `${CONFIG.CORS_PROXY_URL}${CONFIG.BASE_URL}/${endpoint}`;
+    // When using CORS proxy, encode the entire URL
+    url = `${CONFIG.CORS_PROXY_URL}${encodeURIComponent(`${CONFIG.BASE_URL}/${endpoint}`)}`;
   } else {
-    url = `${getBaseUrl()}/${endpoint}`;
+    url = `${CONFIG.BASE_URL}/${endpoint}`;
   }
   
   try {
-    // Check cache first
-    const cacheKey = endpoint;
-    const cachedData = memoryCache[cacheKey];
-    
-    if (cachedData && (Date.now() - cachedData.timestamp) < CONFIG.CACHE_TTL) {
-      console.log(`Using cached data for ${endpoint}`);
-      return cachedData.data;
-    }
-    
-    // Use mock data for local development if enabled
-    if (CONFIG.USE_MOCK_DATA) {
-      console.log(`Using mock data for ${endpoint}`);
-      // Determine which mock data to return based on the endpoint
-      const endpointKey = endpoint.replace('.json', '') as keyof typeof MOCK_DATA;
-      const mockData = MOCK_DATA[endpointKey] || [];
-      
-      // Cache the mock data
-      memoryCache[cacheKey] = {
-        data: mockData,
-        timestamp: Date.now(),
-      };
-      
-      return mockData;
-    }
-    
-    // Fetch from API
     console.log(`Fetching real data from ${url}`);
     
-    // Add a timestamp to bypass cache
-    const fetchUrl = `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
     const fetchOptions: RequestInit = {
       method: 'GET',
       headers: {
@@ -576,7 +610,7 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
       console.log('Using no-cors mode (response will be opaque)');
     }
     
-    const response = await fetch(fetchUrl, fetchOptions);
+    const response = await fetch(url, fetchOptions);
     
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
@@ -591,11 +625,14 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     const data = await response.json();
     console.log(`Successfully fetched data from ${url}:`, data.length ? `${data.length} items` : 'empty response');
     
-    // Cache the result
+    // Cache the result in memory
     memoryCache[cacheKey] = {
       data,
       timestamp: Date.now(),
     };
+    
+    // Cache the result in localStorage
+    setLocalStorageCache(cacheKey, data);
     
     return data;
   } catch (error) {
@@ -615,8 +652,16 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
     
     // If all retries fail, fall back to mock data
     console.log(`All retries failed. Falling back to mock data for ${endpoint}`);
-    const endpointKey = endpoint.replace('.json', '') as keyof typeof MOCK_DATA;
-    return MOCK_DATA[endpointKey] || [];
+    const endpointKey = cacheKey as keyof typeof MOCK_DATA;
+    const mockData = MOCK_DATA[endpointKey] || [];
+    
+    // Cache the mock fallback data
+    memoryCache[cacheKey] = {
+      data: mockData,
+      timestamp: Date.now(),
+    };
+    
+    return mockData;
   }
 }
 
@@ -624,8 +669,19 @@ async function fetchWithRetry(endpoint: string, retries = CONFIG.MAX_RETRIES): P
  * Main function to fetch and process Fubo data
  */
 export async function fetchFuboData(
-  endpoints: (keyof typeof CONFIG.ENDPOINTS)[] = ['matches', 'movies', 'series']
+  endpoints: (keyof typeof CONFIG.ENDPOINTS)[] = ['matches', 'movies', 'series'],
+  options?: { useMockData?: boolean; useCorsProxy?: boolean }
 ): Promise<FuboDataResult> {
+  // Update configuration with provided options
+  if (options) {
+    if (options.useMockData !== undefined) {
+      CONFIG.USE_MOCK_DATA = options.useMockData;
+    }
+    if (options.useCorsProxy !== undefined) {
+      CONFIG.USE_CORS_PROXY = options.useCorsProxy;
+    }
+  }
+  
   const result: Partial<FuboDataResult> = {
     matches: [],
     movies: [],
@@ -662,13 +718,22 @@ export async function fetchFuboData(
  */
 export function getLocalStorageCache(key: string): any {
   try {
+    if (typeof window === 'undefined') return null;
+    
     const cachedData = localStorage.getItem(`fubo_data_${key}`);
     if (cachedData) {
-      const { data, timestamp } = JSON.parse(cachedData);
-      
-      // Check if cache is still valid
-      if ((Date.now() - timestamp) < CONFIG.CACHE_TTL) {
-        return data;
+      try {
+        const { data, timestamp } = JSON.parse(cachedData);
+        
+        // Check if cache is still valid
+        if ((Date.now() - timestamp) < CONFIG.CACHE_TTL) {
+          console.log(`Using localStorage cached data for ${key}`);
+          return data;
+        }
+      } catch (parseError) {
+        console.warn('Error parsing localStorage cache:', parseError);
+        // Invalid cache format, remove it
+        localStorage.removeItem(`fubo_data_${key}`);
       }
     }
   } catch (error) {
@@ -683,6 +748,8 @@ export function getLocalStorageCache(key: string): any {
  */
 export function setLocalStorageCache(key: string, data: any): void {
   try {
+    if (typeof window === 'undefined') return;
+    
     const cacheEntry = {
       data,
       timestamp: Date.now(),

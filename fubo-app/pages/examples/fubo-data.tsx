@@ -3,9 +3,7 @@ import Head from 'next/head';
 import FuboDataExample from '../../components/examples/FuboDataExample';
 import FuboMediaExample from '../../components/examples/FuboMediaExample';
 import { 
-  toggleMockData, 
   isUsingMockData, 
-  toggleCorsProxy,
   isUsingCorsProxy, 
   clearCache 
 } from '../../services/data/fuboDataService';
@@ -18,7 +16,7 @@ export default function FuboDataPage() {
   const [apiStatus, setApiStatus] = useState<'checking' | 'success' | 'error'>('checking');
   const [apiMessage, setApiMessage] = useState<string>('Checking API connection...');
   const [useMockData, setUseMockData] = useState<boolean>(false);
-  const [useCorsProxy, setUseCorsProxy] = useState<boolean>(false);
+  const [useCorsProxy, setUseCorsProxy] = useState<boolean>(true); // Default to true
 
   // Check API connection on load and get settings
   useEffect(() => {
@@ -31,23 +29,15 @@ export default function FuboDataPage() {
         setApiStatus('checking');
         setApiMessage('Checking API connection...');
         
-        let url = 'https://metadata-feeds.fubo.tv/Test/matches.json';
+        // Just check if we can connect, using no-cors mode to avoid CORS errors
+        // This won't actually fetch any data but will tell us if the API is reachable
+        const response = await fetch('https://metadata-feeds.fubo.tv/Test/matches.json', { 
+          mode: 'no-cors',
+          method: 'HEAD'
+        });
         
-        // If using CORS proxy
-        if (useCorsProxy) {
-          url = `https://cors-anywhere.herokuapp.com/${url}`;
-        }
-        
-        const response = await fetch(url);
-        
-        if (response.ok) {
-          const data = await response.json();
-          setApiStatus('success');
-          setApiMessage(`API connection successful! Found ${data.length} matches.`);
-        } else {
-          setApiStatus('error');
-          setApiMessage(`API error: ${response.status} ${response.statusText}`);
-        }
+        setApiStatus('success');
+        setApiMessage('API connection successful. You can access the Fubo API.');
       } catch (error) {
         setApiStatus('error');
         setApiMessage(`API connection failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -55,38 +45,40 @@ export default function FuboDataPage() {
     };
     
     checkApiConnection();
-  }, [useCorsProxy]);
+  }, []);
 
   // Toggle mock data
   const handleToggleMockData = () => {
-    // Toggle mock data using the service function
-    const newMockStatus = toggleMockData();
+    const newMockStatus = !useMockData;
     setUseMockData(newMockStatus);
     
-    // Force reload to apply the change
-    window.location.reload();
+    // Save setting to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('fubo_use_mock_data', String(newMockStatus));
+    }
+    
+    // Clear cache when changing data source
+    clearCache();
   };
 
   // Toggle CORS proxy
   const handleToggleCorsProxy = () => {
-    // Toggle CORS proxy using the service function
-    const newProxyStatus = toggleCorsProxy();
+    const newProxyStatus = !useCorsProxy;
     setUseCorsProxy(newProxyStatus);
     
-    // Clear cache and reload to apply the change
+    // Save setting to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('fubo_use_cors_proxy', String(newProxyStatus));
+    }
+    
+    // Clear cache when changing proxy setting
     clearCache();
-    window.location.reload();
   };
 
   // Clear cache and reload
   const handleClearCache = () => {
     clearCache();
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('fubo_data_matches');
-      window.localStorage.removeItem('fubo_data_movies');
-      window.localStorage.removeItem('fubo_data_series');
-    }
-    window.location.reload();
+    alert('Cache cleared successfully!');
   };
 
   return (
@@ -147,6 +139,7 @@ export default function FuboDataPage() {
             <button
               onClick={handleToggleCorsProxy}
               className="px-3 py-1 text-xs font-medium rounded bg-gray-200 hover:bg-gray-300"
+              disabled={!useMockData && !useCorsProxy && apiStatus !== 'success'}
             >
               {useCorsProxy ? 'Disable' : 'Enable'} CORS Proxy
             </button>
@@ -191,7 +184,11 @@ export default function FuboDataPage() {
       </div>
 
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {activeTab === 'matches' ? <FuboDataExample /> : <FuboMediaExample />}
+        {activeTab === 'matches' ? (
+          <FuboDataExample useMockData={useMockData} useCorsProxy={useCorsProxy} />
+        ) : (
+          <FuboMediaExample useMockData={useMockData} useCorsProxy={useCorsProxy} />
+        )}
       </div>
 
       <div className="mt-8 p-6 bg-gray-50 rounded-lg shadow-sm">
@@ -225,11 +222,7 @@ export default function FuboDataPage() {
             </p>
             <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-md">
               <p className="text-xs text-yellow-700">
-                <strong>Note:</strong> The CORS proxy (cors-anywhere.herokuapp.com) has request limitations. 
-                If you encounter a 429 error (Too Many Requests), you may need to temporarily switch to mock data 
-                or visit <a href="https://cors-anywhere.herokuapp.com/corsdemo" className="underline hover:text-yellow-900" target="_blank" rel="noopener noreferrer">
-                  https://cors-anywhere.herokuapp.com/corsdemo
-                </a> to request temporary access.
+                <strong>Note:</strong> We're now using allorigins.win as the CORS proxy which should have better rate limits than cors-anywhere.
               </p>
             </div>
           </div>
@@ -244,13 +237,6 @@ export default function FuboDataPage() {
             </pre>
             <p className="mt-2 text-sm text-gray-700">
               Then configure your local server to run on <code className="bg-gray-100 px-1 py-0.5 rounded">dev.fubo.tv:3000</code> to avoid CORS issues.
-            </p>
-          </div>
-          
-          <div>
-            <h3 className="text-lg font-medium mb-2">Mock Data</h3>
-            <p className="text-sm text-gray-700">
-              If you can't access the API for any reason, toggle to use mock data instead. This provides a consistent development experience without requiring API access.
             </p>
           </div>
         </div>

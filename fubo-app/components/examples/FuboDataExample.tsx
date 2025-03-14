@@ -1,22 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { fetchFuboData, FuboDataResult, ProcessedMatch } from '../../services/data/fuboDataService';
+import { fetchFuboData, FuboDataResult, ProcessedMatch, clearCache } from '../../services/data/fuboDataService';
 
 /**
  * Example component that demonstrates how to use the Fubo data service
  */
-export default function FuboDataExample() {
+export default function FuboDataExample({ 
+  useMockData = false, 
+  useCorsProxy = true 
+}: {
+  useMockData?: boolean;
+  useCorsProxy?: boolean;
+}) {
   const [data, setData] = useState<FuboDataResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'upcoming' | 'past'>('live');
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const result = await fetchFuboData();
-        setData(result);
         setError(null);
+        
+        // Pass the config options to the fetchFuboData function
+        const result = await fetchFuboData(
+          ['matches', 'movies', 'series'], 
+          { useMockData, useCorsProxy }
+        );
+        
+        setData(result);
       } catch (err) {
         console.error('Error loading Fubo data:', err);
         setError('Failed to load data. Please try again later.');
@@ -26,7 +39,7 @@ export default function FuboDataExample() {
     };
 
     loadData();
-  }, []);
+  }, [useMockData, useCorsProxy, lastRefresh]);
 
   // Filter matches based on active tab
   const getFilteredMatches = (): ProcessedMatch[] => {
@@ -43,12 +56,32 @@ export default function FuboDataExample() {
         return data.matches;
     }
   };
+  
+  const handleRefresh = () => {
+    clearCache();
+    setLastRefresh(new Date());
+  };
 
   const filteredMatches = getFilteredMatches();
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">Fubo Data Example</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Fubo Data Example</h1>
+        <button 
+          onClick={handleRefresh}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+          disabled={loading}
+        >
+          {loading ? 'Refreshing...' : 'Refresh Data'}
+        </button>
+      </div>
+      
+      <div className="mb-4 text-sm text-gray-600">
+        <p><strong>Data Source:</strong> {useMockData ? 'Mock Data' : 'Real API'}</p>
+        <p><strong>CORS Proxy:</strong> {useCorsProxy ? 'Enabled' : 'Disabled'}</p>
+        <p><strong>Last Refreshed:</strong> {lastRefresh.toLocaleTimeString()}</p>
+      </div>
       
       {loading && <p className="text-gray-500">Loading data...</p>}
       

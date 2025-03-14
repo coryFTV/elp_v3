@@ -1,23 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { fetchFuboData, FuboDataResult, ProcessedMovie, ProcessedSeries } from '../../services/data/fuboDataService';
+import { fetchFuboData, FuboDataResult, ProcessedMovie, ProcessedSeries, clearCache } from '../../services/data/fuboDataService';
 
 /**
  * Example component that demonstrates how to display movies and series from the Fubo data service
  */
-export default function FuboMediaExample() {
+export default function FuboMediaExample({ 
+  useMockData = false, 
+  useCorsProxy = true 
+}: {
+  useMockData?: boolean;
+  useCorsProxy?: boolean;
+}) {
   const [data, setData] = useState<FuboDataResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'movies' | 'series'>('movies');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        const result = await fetchFuboData();
-        setData(result);
         setError(null);
+        
+        // Pass the config options to the fetchFuboData function
+        const result = await fetchFuboData(
+          ['movies', 'series'], 
+          { useMockData, useCorsProxy }
+        );
+        
+        setData(result);
       } catch (err) {
         console.error('Error loading Fubo data:', err);
         setError('Failed to load data. Please try again later.');
@@ -27,7 +40,7 @@ export default function FuboMediaExample() {
     };
 
     loadData();
-  }, []);
+  }, [useMockData, useCorsProxy, lastRefresh]);
 
   // Filter media based on search term
   const getFilteredMedia = () => {
@@ -50,6 +63,11 @@ export default function FuboMediaExample() {
                (series.description && series.description.toLowerCase().includes(term));
       }
     });
+  };
+  
+  const handleRefresh = () => {
+    clearCache();
+    setLastRefresh(new Date());
   };
 
   const filteredMedia = getFilteredMedia();
@@ -138,7 +156,22 @@ export default function FuboMediaExample() {
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">Fubo Media Library</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Fubo Media Library</h1>
+        <button 
+          onClick={handleRefresh}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+          disabled={loading}
+        >
+          {loading ? 'Refreshing...' : 'Refresh Data'}
+        </button>
+      </div>
+      
+      <div className="mb-4 text-sm text-gray-600">
+        <p><strong>Data Source:</strong> {useMockData ? 'Mock Data' : 'Real API'}</p>
+        <p><strong>CORS Proxy:</strong> {useCorsProxy ? 'Enabled' : 'Disabled'}</p>
+        <p><strong>Last Refreshed:</strong> {lastRefresh.toLocaleTimeString()}</p>
+      </div>
       
       {loading && <p className="text-gray-500">Loading data...</p>}
       
